@@ -1,0 +1,24 @@
+model Donation {
+  id              String   @id @default(uuid())
+  title           String
+  description     String
+  categoryId      String
+  condition       String
+  imageUrl        String?
+  
+  contactName     String
+  contactEmail    String
+  contactPhone    String
+
+  location        String
+  pickupDates     String
+  pickupTimes     String
+
+  status          String
+  interestsNumber Int     @default(0)
+
+  userId          String
+  updatedAt       DateTime @updatedAt
+
+  createdAt       DateTime @default(now())
+}
