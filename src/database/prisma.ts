@@ -1,3 +1,6 @@
+import env from "dotenv";
+
+env.config();
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import pg from "pg";
