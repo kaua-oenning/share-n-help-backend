@@ -6,6 +6,16 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id        String     @id @default(uuid())
+  name      String
+  email     String     @unique
+  password  String
+  donations Donation[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
 model Donation {
   id              String   @id @default(uuid())
   title           String
@@ -26,6 +36,20 @@ model Donation {
   interestsNumber Int      @default(0)
 
   userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  interests       Interest[]
+
   updatedAt       DateTime @updatedAt
   createdAt       DateTime @default(now())
+}
+
+model Interest {
+  id         String   @id @default(uuid())
+  name       String
+  phone      String
+  email      String
+  donationId String
+  donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
 }
