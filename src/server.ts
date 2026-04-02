@@ -12,7 +12,7 @@ const app = Fastify({ logger: true });
 
 async function start() {
   await app.register(cors, {
-    origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(",") : ["http://localhost:5173"],
+    origin: true,
     credentials: true,
   });
 
