@@ -15,6 +15,20 @@ export default async function bemRoutes(app: FastifyInstance) {
     return reply.send(bens);
   });
 
+  // Rota autenticada: listar apenas os itens do usuário logado
+  app.get(
+    "/bens/meus",
+    { preHandler: [(app as any).authenticate] },
+    async (request, reply) => {
+      const user = (request as any).user as { sub: string };
+      const bens = await prisma.donation.findMany({
+        where: { userId: user.sub },
+        include: { interests: true },
+      });
+      return reply.send(bens);
+    }
+  );
+
   app.get("/bens/:id", async (request, reply) => {
     try {
       const { id } = request.params as { id: string };
@@ -115,17 +129,4 @@ export default async function bemRoutes(app: FastifyInstance) {
     }
   );
 
-  // Rota autenticada: listar apenas os itens do usuário logado
-  app.get(
-    "/bens/meus",
-    { preHandler: [(app as any).authenticate] },
-    async (request, reply) => {
-      const user = (request as any).user as { sub: string };
-      const bens = await prisma.donation.findMany({
-        where: { userId: user.sub },
-        include: { interests: true },
-      });
-      return reply.send(bens);
-    }
-  );
 }
