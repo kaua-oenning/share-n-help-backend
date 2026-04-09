@@ -11,9 +11,11 @@ model User {
   name      String
   email     String     @unique
   password  String
-  donations Donation[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  donations     Donation[]
+  requests      Request[]
+  notifications Notification[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 }
 
 model Donation {
@@ -32,8 +34,12 @@ model Donation {
   pickupDates     String
   pickupTimes     String
 
-  status          String
-  interestsNumber Int      @default(0)
+  status               String
+  interestsNumber      Int      @default(0)
+
+  donatedToInterestId  String?
+  donorConfirmedAt     DateTime?
+  recipientConfirmedAt DateTime?
 
   userId          String
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -52,4 +58,30 @@ model Interest {
   donationId String
   donation   Donation @relation(fields: [donationId], references: [id], onDelete: Cascade)
   createdAt  DateTime @default(now())
+}
+
+model Request {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  email     String?
+  location  String
+  reason    String
+  items     String[]
+  status    String   @default("active")
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String
+  message       String
+  relatedItemId String?
+  read          Boolean  @default(false)
+  createdAt     DateTime @default(now())
 }

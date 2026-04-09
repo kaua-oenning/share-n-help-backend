@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import "@fastify/jwt";
 
 export default async function authRoutes(app: FastifyInstance) {
-  app.post("/auth/register", async (request, reply) => {
+  app.post("/auth/register", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
     const { name, email, password } = request.body as any;
 
     if (!name || !email || !password) {
@@ -35,7 +35,7 @@ export default async function authRoutes(app: FastifyInstance) {
     return reply.status(201).send({ token, user: { id: user.id, name: user.name, email: user.email } });
   });
 
-  app.post("/auth/login", async (request, reply) => {
+  app.post("/auth/login", { config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (request, reply) => {
     const { email, password } = request.body as any;
 
     if (!email || !password) {
