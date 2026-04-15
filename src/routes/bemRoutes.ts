@@ -10,10 +10,21 @@ async function autoConfirmExpired(donationId?: string) {
   };
   if (donationId) where.id = donationId;
 
-  await prisma.donation.updateMany({
-    where,
-    data: { status: "donated" },
-  });
+  const expired = await prisma.donation.findMany({ where });
+  for (const d of expired) {
+    await prisma.donation.update({
+      where: { id: d.id },
+      data: { status: "donated", recipientConfirmedAt: new Date(), updatedAt: new Date() },
+    });
+    await prisma.notification.create({
+      data: {
+        userId: d.userId,
+        type: "auto_confirmed",
+        message: `"${d.title}" foi marcado como doado automaticamente (confirmação expirada).`,
+        relatedItemId: d.id,
+      },
+    });
+  }
 }
 
 export default async function bemRoutes(app: FastifyInstance) {
@@ -54,6 +65,20 @@ export default async function bemRoutes(app: FastifyInstance) {
     });
   });
 
+  // Public: count available items per category
+  app.get("/bens/count-by-category", async (_request, reply) => {
+    const counts = await prisma.donation.groupBy({
+      by: ["categoryId"],
+      where: { status: "available" },
+      _count: { id: true },
+    });
+    const result: Record<string, number> = {};
+    for (const c of counts) {
+      result[c.categoryId] = c._count.id;
+    }
+    return reply.send(result);
+  });
+
   // Authenticated: list user's own items
   app.get(
     "/bens/meus",
@@ -89,23 +114,26 @@ export default async function bemRoutes(app: FastifyInstance) {
     }
   });
 
-  // Public: express interest in a donation
+  // Authenticated: express interest in a donation
   app.post(
     "/bens/:id/interest",
     {
+      preHandler: [(app as any).authenticate],
       config: { rateLimit: { max: 3, timeWindow: "1 minute" } },
     },
     async (request, reply) => {
       try {
         const { id } = request.params as { id: string };
-        const { name, phone, email } = request.body as {
-          name: string;
-          phone: string;
-          email: string;
-        };
+        const userPayload = (request as any).user as { sub: string };
+        const { phone } = request.body as { phone: string };
 
-        if (!name || !phone || !email) {
-          return reply.status(400).send({ message: "Nome, telefone e email são obrigatórios." });
+        const userRecord = await prisma.user.findUnique({ where: { id: userPayload.sub } });
+        if (!userRecord) {
+          return reply.status(401).send({ message: "Usuário não encontrado." });
+        }
+
+        if (!phone) {
+          return reply.status(400).send({ message: "Telefone é obrigatório." });
         }
 
         const donation = await prisma.donation.findUnique({ where: { id } });
@@ -113,14 +141,28 @@ export default async function bemRoutes(app: FastifyInstance) {
           return reply.status(404).send({ message: "Item não encontrado." });
         }
 
-        await prisma.interest.create({ data: { name, phone, email, donationId: id } });
+        if (donation.userId === userPayload.sub) {
+          return reply.status(400).send({ message: "Você não pode demonstrar interesse no próprio item." });
+        }
+
+        // Check if user already expressed interest
+        const existing = await prisma.interest.findFirst({
+          where: { donationId: id, email: userRecord.email },
+        });
+        if (existing) {
+          return reply.status(400).send({ success: false, message: "Você já demonstrou interesse neste item." });
+        }
+
+        await prisma.interest.create({
+          data: { name: userRecord.name, phone, email: userRecord.email, donationId: id },
+        });
 
         // Create notification for the item owner
         await prisma.notification.create({
           data: {
             userId: donation.userId,
             type: "new_interest",
-            message: `${name} demonstrou interesse em "${donation.title}"`,
+            message: `${userRecord.name} demonstrou interesse em "${donation.title}"`,
             relatedItemId: id,
           },
         });
@@ -335,6 +377,63 @@ export default async function bemRoutes(app: FastifyInstance) {
         return reply.send({ success: true });
       } catch (error: any) {
         return reply.status(500).send({ message: "Erro ao confirmar recebimento.", error: error.message });
+      }
+    }
+  );
+
+  // Authenticated: cancel selection (revert to available)
+  app.patch(
+    "/bens/:id/cancel-selection",
+    { preHandler: [(app as any).authenticate] },
+    async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const user = (request as any).user as { sub: string };
+
+        const bem = await prisma.donation.findUnique({
+          where: { id },
+          include: { interests: true },
+        });
+        if (!bem) return reply.status(404).send({ message: "Item não encontrado." });
+        if (bem.userId !== user.sub) {
+          return reply.status(403).send({ message: "Sem permissão." });
+        }
+        if (bem.status !== "pending_confirmation") {
+          return reply.status(400).send({ message: "Item não está aguardando confirmação." });
+        }
+
+        const selectedInterest = bem.interests.find((i) => i.id === bem.donatedToInterestId);
+
+        await prisma.donation.update({
+          where: { id },
+          data: {
+            status: "available",
+            donatedToInterestId: null,
+            donorConfirmedAt: null,
+            recipientConfirmedAt: null,
+            updatedAt: new Date(),
+          },
+        });
+
+        if (selectedInterest) {
+          const recipientUser = await prisma.user.findUnique({
+            where: { email: selectedInterest.email },
+          });
+          if (recipientUser) {
+            await prisma.notification.create({
+              data: {
+                userId: recipientUser.id,
+                type: "selection_cancelled",
+                message: `A seleção para "${bem.title}" foi cancelada pelo doador. O item está disponível novamente.`,
+                relatedItemId: id,
+              },
+            });
+          }
+        }
+
+        return reply.send({ success: true });
+      } catch (error: any) {
+        return reply.status(500).send({ message: "Erro ao cancelar seleção.", error: error.message });
       }
     }
   );

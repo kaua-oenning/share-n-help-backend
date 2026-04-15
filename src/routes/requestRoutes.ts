@@ -66,4 +66,27 @@ export default async function requestRoutes(app: FastifyInstance) {
       }
     }
   );
+
+  // Authenticated: delete own request
+  app.delete(
+    "/requests/:id",
+    { preHandler: [(app as any).authenticate] },
+    async (request, reply) => {
+      try {
+        const { id } = request.params as { id: string };
+        const user = (request as any).user as { sub: string };
+
+        const req = await prisma.request.findUnique({ where: { id } });
+        if (!req) return reply.status(404).send({ message: "Solicitação não encontrada." });
+        if (req.userId !== user.sub) {
+          return reply.status(403).send({ message: "Sem permissão." });
+        }
+
+        await prisma.request.delete({ where: { id } });
+        return reply.send({ success: true });
+      } catch (error: any) {
+        return reply.status(500).send({ message: "Erro ao excluir solicitação.", error: error.message });
+      }
+    }
+  );
 }
