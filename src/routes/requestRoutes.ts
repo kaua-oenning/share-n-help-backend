@@ -11,6 +11,16 @@ export default async function requestRoutes(app: FastifyInstance) {
     return reply.send(requests);
   });
 
+  // Public: get a single request by id
+  app.get("/requests/:id", async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const req = await prisma.request.findUnique({ where: { id } });
+    if (!req) {
+      return reply.status(404).send({ message: "Solicitação não encontrada." });
+    }
+    return reply.send(req);
+  });
+
   // Authenticated: list user's own requests
   app.get(
     "/requests/minhas",
